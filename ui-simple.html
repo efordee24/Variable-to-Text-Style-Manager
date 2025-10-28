@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), display-capture=()">
+  <title>Variable Binder for Text Styles</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 12px;
+      line-height: 1.4;
+      color: #333;
+      background: #fff;
+    }
+    
+    .app {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+    
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px;
+      border-bottom: 1px solid #e5e5e5;
+      background: #f8f9fa;
+    }
+    
+    .header h1 {
+      font-size: 16px;
+      font-weight: 600;
+      color: #1a1a1a;
+    }
+    
+    .header-actions {
+      display: flex;
+      gap: 8px;
+    }
+    
+    .btn {
+      padding: 8px 16px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      background: #fff;
+      color: #374151;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .btn:hover {
+      background: #f9fafb;
+      border-color: #9ca3af;
+    }
+    
+    .btn-primary {
+      background: #0066cc;
+      color: #fff;
+      border-color: #0066cc;
+    }
+    
+    .btn-primary:hover {
+      background: #0052a3;
+      border-color: #0052a3;
+    }
+    
+    .content {
+      flex: 1;
+      padding: 16px;
+      padding-bottom: 20px; /* Extra space for resize handle */
+      overflow: auto;
+    }
+    
+    .resizer {
+      position: fixed;
+      right: 0;
+      bottom: 0;
+      width: 14px;
+      height: 14px;
+      cursor: nwse-resize;
+      user-select: none;
+      z-index: 1000;
+      background: linear-gradient(135deg, transparent 50%, rgba(0,0,0,.15) 50%) no-repeat 0 0 / 100% 100%;
+    }
+
+    .resizer:hover {
+      background: linear-gradient(135deg, transparent 50%, rgba(0,0,0,.25) 50%) no-repeat 0 0 / 100% 100%;
+    }
+    
+    .loading {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      gap: 16px;
+    }
+    
+    .spinner {
+      width: 24px;
+      height: 24px;
+      border: 2px solid #e5e5e5;
+      border-top: 2px solid #0066cc;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      gap: 16px;
+      padding: 32px;
+      text-align: center;
+    }
+    
+    .empty-state h2 {
+      font-size: 16px;
+      font-weight: 600;
+      color: #374151;
+    }
+    
+    .empty-state p {
+      color: #6b7280;
+      max-width: 300px;
+    }
+    
+    .property-selectors {
+      padding: 16px;
+      border-bottom: 1px solid #e5e5e5;
+      background: #fafafa;
+    }
+    
+    .property-selectors h2 {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: #1a1a1a;
+    }
+    
+    .selector-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+    }
+
+    .selector-grid .variable-group-picker:last-child {
+      display: flex;
+      align-items: end;
+    }
+    
+    .variable-group-picker {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .variable-group-picker-button {
+      align-items: end;
+      grid-column-start: 4;
+    }
+    
+    .picker-label {
+      font-size: 11px;
+      font-weight: 500;
+      color: #374151;
+    }
+    
+    .picker-select {
+      padding: 6px 8px;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+      background: #fff;
+      font-size: 11px;
+      color: #374151;
+    }
+    
+    .table-container {
+      flex: 1;
+      overflow: auto;
+      padding: 16px;
+    }
+    
+    .table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+    
+    .table th {
+      background: #f8f9fa;
+      padding: 12px;
+      text-align: left;
+      font-weight: 600;
+      font-size: 12px;
+      color: #374151;
+      border-bottom: 1px solid #e5e5e5;
+    }
+    
+    .table td {
+      padding: 12px;
+      border-bottom: 1px solid #f3f4f6;
+      font-size: 12px;
+      vertical-align: top;
+    }
+    
+    .table tr:hover {
+      background: #f9fafb;
+    }
+    
+    .table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .variable-dropdown {
+      width: 100%;
+      padding: 4px 8px;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+      font-size: 12px;
+      background: white;
+    }
+
+    .variable-dropdown:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+    }
+
+    .filter-controls {
+      margin-bottom: 12px;
+      padding: 12px;
+      background: #f8f9fa;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+    }
+
+    .filter-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .filter-input {
+      flex: 1;
+      padding: 6px 8px;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+      font-size: 12px;
+      background: white;
+    }
+
+    .filter-input:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+    }
+
+    .filter-input::placeholder {
+      color: #9ca3af;
+      font-size: 11px;
+    }
+
+    .btn-secondary {
+      background: #6b7280;
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 500;
+    }
+
+    .btn-secondary:hover {
+      background: #4b5563;
+    }
+    
+    .toast {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      padding: 12px 16px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      z-index: 1000;
+      transform: translateX(100%);
+      transition: transform 0.3s ease;
+    }
+    
+    .toast.visible {
+      transform: translateX(0);
+    }
+    
+    .toast.success {
+      background: #d1fae5;
+      color: #065f46;
+      border: 1px solid #a7f3d0;
+    }
+    
+    .toast.error {
+      background: #fee2e2;
+      color: #991b1b;
+      border: 1px solid #fca5a5;
+    }
+    
+    .toast.info {
+      background: #dbeafe;
+      color: #1e40af;
+      border: 1px solid #93c5fd;
+    }
+
+    /* Pagination styles */
+    .pagination button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .pagination button:disabled:hover {
+      background-color: #e0e0e0;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="header">
+      <h1>Variable Binder for Text Styles</h1>
+      <div class="header-actions">
+        <button class="btn" onclick="handleReload()">Reload</button>
+        <button class="btn btn-primary" onclick="handleBulkUpdate()">Update Styles</button>
+      </div>
+    </div>
+
+    <div class="content" id="content">
+      <div class="loading">
+        <div class="spinner"></div>
+        <p>Loading text styles and variables...</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="resizer" id="resizer" title="Drag to resize"></div>
+  <div id="toast" class="toast"></div>
+
+  <script>
+    let data = null;
+    let loading = true;
+    let propertyCollections = {}; // Track selected group paths for each property
+    let styleChanges = {}; // Track changes made to styles
+    let currentPage = 0; // Pagination state
+    let rowsPerPage = 25; // Number of rows to show per page
+    let filteredStyles = null; // Store filtered styles
+    let currentFilter = ''; // Store current filter value
+
+    // Load saved property collections from localStorage
+    function loadPropertyCollections() {
+      try {
+        var saved = localStorage.getItem('variable-selections');
+        if (saved) {
+          propertyCollections = JSON.parse(saved);
+        }
+      } catch (error) {
+        console.error('Error loading property collections:', error);
+        propertyCollections = {};
+      }
+    }
+
+    // Save property collections to localStorage
+    function savePropertyCollections() {
+      try {
+        localStorage.setItem('figma-plugin-property-collections', JSON.stringify(propertyCollections));
+      } catch (error) {
+        console.error('Error saving property collections:', error);
+      }
+    }
+
+    // Restore selected values in dropdowns after rendering
+    function restoreDropdownSelections() {
+      try {
+        // Set values for each dropdown
+        var fontFamilySelect = document.getElementById('fontFamilySelect');
+        var fontSizeSelect = document.getElementById('fontSizeSelect');
+        var fontWeightSelect = document.getElementById('fontWeightSelect');
+        var lineHeightSelect = document.getElementById('lineHeightSelect');
+        var letterSpacingSelect = document.getElementById('letterSpacingSelect');
+        
+        if (fontFamilySelect) fontFamilySelect.value = propertyCollections.fontFamily || '';
+        if (fontSizeSelect) fontSizeSelect.value = propertyCollections.fontSize || '';
+        if (fontWeightSelect) fontWeightSelect.value = propertyCollections.fontWeight || '';
+        if (lineHeightSelect) lineHeightSelect.value = propertyCollections.lineHeight || '';
+        if (letterSpacingSelect) letterSpacingSelect.value = propertyCollections.letterSpacing || '';
+      } catch (error) {
+        console.error('Error restoring dropdown selections:', error);
+      }
+    }
+
+    // Pagination functions
+    function nextPage() {
+      const totalPages = Math.ceil(getTotalStylesCount() / rowsPerPage);
+      if (currentPage < totalPages - 1) {
+        currentPage++;
+        renderUI();
+      }
+    }
+
+    function previousPage() {
+      if (currentPage > 0) {
+        currentPage--;
+        renderUI();
+      }
+    }
+
+    function goToPage(page) {
+      const totalPages = Math.ceil(getTotalStylesCount() / rowsPerPage);
+      if (page >= 0 && page < totalPages) {
+        currentPage = page;
+        renderUI();
+      }
+    }
+
+    // Get visible styles for current page
+    function getVisibleStyles() {
+      if (!data || !data.styles) return [];
+      
+      // Use filtered styles if available, otherwise use all styles
+      const stylesToShow = filteredStyles || data.styles;
+      const startIndex = currentPage * rowsPerPage;
+      const endIndex = Math.min(startIndex + rowsPerPage, stylesToShow.length);
+      return stylesToShow.slice(startIndex, endIndex);
+    }
+
+    // Get total count for pagination (filtered or all)
+    function getTotalStylesCount() {
+      if (!data || !data.styles) return 0;
+      return filteredStyles ? filteredStyles.length : data.styles.length;
+    }
+
+    let selectedCollections = {
+      fontFamily: '',
+      fontSize: '',
+      fontWeight: '',
+      lineHeight: '',
+      letterSpacing: ''
+    };
+
+    // Initialize
+    // Initialize the UI
+    window.addEventListener('load', function() {
+      console.log('UI loaded, loading saved selections...');
+      
+      // Load saved property collections
+      loadPropertyCollections();
+      
+      // Request data from plugin
+      parent.postMessage({ pluginMessage: { type: 'INIT_REQUEST' } }, '*');
+    });
+
+    // Listen for messages from the plugin
+    window.addEventListener('message', function(event) {
+      const message = event.data.pluginMessage;
+      console.log('Received message:', message);
+      
+      if (message.type === 'INIT_DATA' || message.type === 'TABLE_DATA') {
+        data = message.data;
+        loading = false;
+        renderUI();
+        
+        // Restore selected values in dropdowns after rendering
+        restoreDropdownSelections();
+      } else if (message.type === 'TOAST') {
+        showToast(message.message, message.variant);
+        
+        // Clear styleChanges if bulk update was successful
+        if (message.variant === 'success' && message.message.includes('Updated')) {
+          styleChanges = {};
+          console.log('Cleared styleChanges after successful bulk update');
+        }
+      } else if (message.type === 'CSV_READY') {
+        downloadCSV(message.csv);
+      }
+    });
+
+    // Send ready message to restore saved size
+    parent.postMessage({
+      pluginMessage: { type: 'READY' }
+    }, '*');
+
+    // Implement drag-to-resize
+    var resizer = document.getElementById('resizer');
+    var dragging = false;
+    var startX = 0;
+    var startY = 0;
+    var startW = 0;
+    var startH = 0;
+
+    resizer.addEventListener('pointerdown', function(e) {
+      dragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      startW = window.innerWidth;
+      startH = window.innerHeight;
+      resizer.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    });
+
+    window.addEventListener('pointermove', function(e) {
+      if (!dragging) return;
+      var dw = e.clientX - startX;
+      var dh = e.clientY - startY;
+      parent.postMessage({
+        pluginMessage: {
+          type: 'RESIZE',
+          width: startW + dw,
+          height: startH + dh
+        }
+      }, '*');
+    });
+
+    window.addEventListener('pointerup', function(e) {
+      if (!dragging) return;
+      dragging = false;
+      if (resizer.releasePointerCapture) {
+        resizer.releasePointerCapture(e.pointerId);
+      }
+    });
+
+    function renderGroupPaths(groupPaths, propertyType) {
+ 
+      var html = '';
+      
+      // Check if groupPaths exists and is an object
+      if (!groupPaths || typeof groupPaths !== 'object') {
+        return html;
+      }
+      
+      // Get the currently selected value for this property
+      var selectedValue = propertyCollections[propertyType] || '';
+      
+      // Get all paths and sort them alphabetically
+      var sortedPaths = Object.keys(groupPaths).sort();
+      
+      // Simple approach: iterate through sorted group paths
+      sortedPaths.forEach(function(path) {
+        var groupPath = groupPaths[path];
+        if (groupPath && groupPath.variables) {
+          var isSelected = selectedValue === groupPath.path;
+          html += '<option value="' + groupPath.path + '"' + (isSelected ? ' selected' : '') + '>' + 
+                 groupPath.path + ' (' + groupPath.variables.length + ' variables)</option>';
+        }
+      });
+      
+      return html;
+    }
+
+    // Function to match variables with text style property values
+    function findMatchingVariable(styleValue, groupPath, propertyType) {
+      if (!data.groupPaths || !data.groupPaths[groupPath]) {
+        return null;
+      }
+      
+      var variables = data.groupPaths[groupPath].variables;
+      
+      for (var i = 0; i < variables.length; i++) {
+        var variable = variables[i];
+        var variableValue = variable.value;
+        
+        // Convert variable value to string for comparison
+        var variableValueStr = '';
+        if (typeof variableValue === 'object' && variableValue !== null) {
+          if (propertyType === 'fontFamily') {
+            variableValueStr = variableValue.family || '';
+          } else if (propertyType === 'fontSize') {
+            variableValueStr = variableValue.toString();
+          } else if (propertyType === 'fontWeight') {
+            variableValueStr = variableValue.toString();
+          } else if (propertyType === 'lineHeight') {
+            variableValueStr = variableValue.toString();
+          } else if (propertyType === 'letterSpacing') {
+            variableValueStr = variableValue.toString();
+          }
+        } else {
+          variableValueStr = variableValue.toString();
+        }
+        
+        // Compare values
+        if (styleValue && variableValueStr && styleValue.toString() === variableValueStr) {
+          return variable;
+        }
+      }
+      
+      return null;
+    }
+
+    // Function to format variable value for display
+    function formatVariableValue(variable, propertyType) {
+      if (!variable || !variable.value) {
+        return '';
+      }
+      
+      var value = variable.value;
+      
+      // Handle different value types
+      if (typeof value === 'object' && value !== null) {
+        if (propertyType === 'fontFamily' && value.family) {
+          return value.family + (value.style ? ' ' + value.style : '');
+        } else if (propertyType === 'fontSize' && typeof value === 'number') {
+          return value + 'px';
+        } else if (propertyType === 'fontWeight' && typeof value === 'number') {
+          return value.toString();
+        } else if (propertyType === 'lineHeight' && typeof value === 'number') {
+          return value + 'px';
+        } else if (propertyType === 'letterSpacing' && typeof value === 'number') {
+          return value + 'px';
+        } else if (value.r !== undefined && value.g !== undefined && value.b !== undefined) {
+          // Color value
+          var r = Math.round(value.r * 255);
+          var g = Math.round(value.g * 255);
+          var b = Math.round(value.b * 255);
+          return 'rgb(' + r + ', ' + g + ', ' + b + ')';
+        }
+      }
+      
+      return value.toString();
+    }
+
+    // Function to format literal values for display
+    function formatLiteralValue(value, propertyType, variableId) {
+      if (!value) return '';
+      
+      var formattedValue = '';
+      var isVariable = variableId && variableId !== null;
+      
+      if (typeof value === 'object' && value !== null) {
+        if (propertyType === 'lineHeight' || propertyType === 'letterSpacing') {
+          formattedValue = value.value + (value.unit === 'PIXELS' ? 'px' : value.unit === 'PERCENT' ? '%' : '');
+        } else if (propertyType === 'fontFamily' && value.family) {
+          formattedValue = value.family + (value.style ? ' ' + value.style : '');
+        } else {
+          formattedValue = value.toString();
+        }
+      } else {
+        formattedValue = value.toString();
+      }
+      
+      // Add emoji icon if this is a bound variable
+      if (isVariable) {
+        return '🔗 ' + formattedValue;
+      }
+      
+      return formattedValue;
+    }
+
+    // Function to render variable dropdown for a table cell
+    function renderVariableDropdown(style, propertyType, groupPath) {
+
+      if (!groupPath || !data.groupPaths || !data.groupPaths[groupPath]) {
+        return formatLiteralValue(style.current[propertyType].value, propertyType, style.current[propertyType].variableId);
+      }
+      
+      var variables = data.groupPaths[groupPath].variables;
+      var currentValue = style.current[propertyType].value;
+      var boundVariableId = style.current[propertyType].variableId;
+      var formattedCurrentValue = formatLiteralValue(currentValue, propertyType, boundVariableId);      
+      var html = '<select class="variable-dropdown" onchange="handleVariableChange(\'' + style.styleId + '\', \'' + propertyType + '\', this.value)">';
+      html += '<option value=""' + (!boundVariableId ? ' selected' : '') + '>' + (formattedCurrentValue || 'No value') + '</option>';
+      
+      // Check if variables exists and is an array
+      if (variables && Array.isArray(variables)) {
+        variables.forEach(function(variable) {
+          var displayValue = formatVariableValue(variable, propertyType);
+          var isSelected = boundVariableId && boundVariableId === variable.id;
+          html += '<option value="' + variable.id + '"' + (isSelected ? ' selected' : '') + '>' + 
+                 variable.name + (displayValue ? ' (' + displayValue + ')' : '') + '</option>';
+        });
+      }
+      
+      html += '</select>';
+      return html;
+    }
+
+    function renderUI() {
+      const content = document.getElementById('content');
+      
+      if (loading) {
+        content.innerHTML = `
+          <div class="loading">
+            <div class="spinner"></div>
+            <p>Loading text styles and variables...</p>
+          </div>
+        `;
+        return;
+      }
+
+      if (!data || !data.styles || data.styles.length === 0) {
+        content.innerHTML = `
+          <div class="empty-state">
+            <h2>No Text Styles Found</h2>
+            <p>This file doesn't contain any text styles yet. Create some text styles in your Figma file and then reload the plugin to get started.</p>
+          </div>
+        `;
+        return;
+      }
+
+      content.innerHTML = `
+        <div class="property-selectors">
+          <h2>Select variable groups to assign</h2>
+          <div class="selector-grid">
+            <div class="variable-group-picker">
+              <label class="picker-label">Font Family</label>
+              <select class="picker-select" id="fontFamilySelect">
+                <option value="">Select group...</option>
+                ${renderGroupPaths(data.groupPaths || {}, 'fontFamily')}
+              </select>
+            </div>
+            <div class="variable-group-picker">
+              <label class="picker-label">Font Size</label>
+              <select class="picker-select" id="fontSizeSelect">
+                <option value="">Select group...</option>
+                ${renderGroupPaths(data.groupPaths || {}, 'fontSize')}
+              </select>
+            </div>
+            <div class="variable-group-picker">
+              <label class="picker-label">Font Weight</label>
+              <select class="picker-select" id="fontWeightSelect">
+                <option value="">Select group...</option>
+                ${renderGroupPaths(data.groupPaths || {}, 'fontWeight')}
+              </select>
+            </div>
+            <div class="variable-group-picker">
+              <label class="picker-label">Line Height</label>
+              <select class="picker-select" id="lineHeightSelect">
+                <option value="">Select group...</option>
+                ${renderGroupPaths(data.groupPaths || {}, 'lineHeight')}
+              </select>
+            </div>
+            <div class="variable-group-picker">
+              <label class="picker-label">Letter Spacing</label>
+              <select class="picker-select" id="letterSpacingSelect">
+                <option value="">Select group...</option>
+                ${renderGroupPaths(data.groupPaths || {}, 'letterSpacing')}
+              </select>
+            </div>
+            <div class="variable-group-picker variable-group-picker-button">
+              <button class="btn btn-secondary" onclick="applyVariableSelections()">Apply Variable Groups</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="table-container">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <h3 style="font-size: 14px; font-weight: 600; color: #1a1a1a;">Text Styles (${getTotalStylesCount()}) - Page ${currentPage + 1} of ${Math.ceil(getTotalStylesCount() / rowsPerPage)}</h3>
+          </div>
+          
+          <!-- Filter controls above table -->
+          <div class="filter-controls">
+            <div class="filter-group">
+              <input type="text" class="filter-input" id="styleNameFilter" placeholder="Filter Style Name..." />
+              <button class="btn btn-secondary" onclick="applyFilter()">Filter</button>
+              <button class="btn btn-secondary" onclick="clearFilter()">Clear</button>
+            </div>
+          </div>
+          
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Style Name</th>
+                <th>Font Family</th>
+                <th>Font Size</th>
+                <th>Font Weight</th>
+                <th>Line Height</th>
+                <th>Letter Spacing</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${getVisibleStyles().map(style => `
+                <tr class="table-row" data-style-id="${style.styleId}">
+                  <td class="filter-cell-style-name"><strong>${style.styleName}</strong></td>
+                  <td class="filter-cell-font-family">${renderVariableDropdown(style, 'fontFamily', propertyCollections.fontFamily)}</td>
+                  <td class="filter-cell-font-size">${renderVariableDropdown(style, 'fontSize', propertyCollections.fontSize)}</td>
+                  <td class="filter-cell-font-weight">${renderVariableDropdown(style, 'fontWeight', propertyCollections.fontWeight)}</td>
+                  <td class="filter-cell-line-height">${renderVariableDropdown(style, 'lineHeight', propertyCollections.lineHeight)}</td>
+                  <td class="filter-cell-letter-spacing">${renderVariableDropdown(style, 'letterSpacing', propertyCollections.letterSpacing)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          
+          <!-- Pagination controls -->
+          <div class="pagination" style="display: flex; justify-content: center; align-items: center; gap: 12px; margin-top: 16px;">
+            <button class="btn btn-secondary" onclick="previousPage()" ${currentPage === 0 ? 'disabled' : ''}>Previous</button>
+            <span style="font-size: 14px; color: #666;">Page ${currentPage + 1} of ${Math.ceil(getTotalStylesCount() / rowsPerPage)}</span>
+            <button class="btn btn-secondary" onclick="nextPage()" ${currentPage >= Math.ceil(getTotalStylesCount() / rowsPerPage) - 1 ? 'disabled' : ''}>Next</button>
+          </div>
+        </div>
+      `;
+    }
+
+    function applyVariableSelections() {
+      
+      // Get all selected group paths
+      const fontFamilyGroup = document.getElementById('fontFamilySelect').value;
+      const fontSizeGroup = document.getElementById('fontSizeSelect').value;
+      const fontWeightGroup = document.getElementById('fontWeightSelect').value;
+      const lineHeightGroup = document.getElementById('lineHeightSelect').value;
+      const letterSpacingGroup = document.getElementById('letterSpacingSelect').value;
+      
+      // Store the selected group paths
+      propertyCollections = {
+        fontFamily: fontFamilyGroup,
+        fontSize: fontSizeGroup,
+        fontWeight: fontWeightGroup,
+        lineHeight: lineHeightGroup,
+        letterSpacing: letterSpacingGroup
+      };
+      
+      // Save to localStorage
+      savePropertyCollections();
+      
+      // Re-render the UI to update table cells with new variable dropdowns
+      renderUI();
+      
+      // Send message to plugin
+      parent.postMessage({
+        pluginMessage: {
+          type: 'PROPERTY_COLLECTIONS_CHANGED',
+          propertyCollections: propertyCollections
+        }
+      }, '*');
+    }
+
+    function handleVariableChange(styleId, propertyType, variableId) {
+      console.log('handleVariableChange called with:', styleId, propertyType, variableId);
+      // Track the change
+      if (!styleChanges[styleId]) {
+        styleChanges[styleId] = {};
+      }
+      
+      if (variableId) {
+        console.log('styleId:', styleId);
+        console.log('propertyType:', propertyType);
+        styleChanges[styleId][propertyType] = variableId;
+      } else {
+        // If no variable selected, remove the change
+        delete styleChanges[styleId][propertyType];
+        if (Object.keys(styleChanges[styleId]).length === 0) {
+          delete styleChanges[styleId];
+        }
+      }
+      
+    }
+
+    function handleReload() {
+      loading = true;
+      renderUI();
+      parent.postMessage({ pluginMessage: { type: 'REQUEST_RESCAN' } }, '*');
+    }
+
+    function handleExportCSV() {
+      parent.postMessage({ pluginMessage: { type: 'REQUEST_EXPORT_CSV' } }, '*');
+    }
+
+    function handleBulkUpdate() {
+      
+      if (Object.keys(styleChanges).length === 0) {
+        showToast('No changes to apply', 'info');
+        return;
+      }
+      
+      parent.postMessage({ 
+        pluginMessage: { 
+          type: 'REQUEST_BULK_UPDATE',
+          changes: styleChanges
+        } 
+      }, '*');
+    }
+
+    function showToast(message, variant = 'info') {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.className = `toast ${variant} visible`;
+      setTimeout(() => {
+        toast.className = 'toast';
+      }, 3000);
+    }
+
+    function applyFilter() {
+      const filterInput = document.getElementById('styleNameFilter');
+      const filterValue = filterInput.value.toLowerCase().trim();
+      currentFilter = filterValue;
+      
+      if (filterValue === '') {
+        // Clear filter - show all styles
+        filteredStyles = null;
+      } else {
+        // Apply filter to entire dataset
+        filteredStyles = data.styles.filter(style => 
+          style.styleName.toLowerCase().includes(filterValue)
+        );
+      }
+      
+      // Reset to first page when filtering
+      currentPage = 0;
+      
+      // Re-render the UI with filtered results
+      renderUI();
+    }
+
+    function clearFilter() {
+      const filterInput = document.getElementById('styleNameFilter');
+      filterInput.value = '';
+      currentFilter = '';
+      filteredStyles = null;
+      currentPage = 0;
+      renderUI();
+    }
+
+    function downloadCSV(csv) {
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'text-styles-export.csv';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+  </script>
+</body>
+</html>

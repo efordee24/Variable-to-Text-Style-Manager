@@ -1,0 +1,12 @@
+{
+  "api": "1.0.0",
+  "editorType": ["figma"],
+  "ui": "dist/ui/index.html",
+  "main": "dist/code.js",
+  "name": "Variable Binder for Text Styles",
+  "id": "your.plugin.id",
+  "documentAccess": "dynamic",
+  "networkAccess": {
+    "allowedDomains": ["none"]
+  }
+}
