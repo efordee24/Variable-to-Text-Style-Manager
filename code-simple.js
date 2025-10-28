@@ -169,7 +169,7 @@ async function handleBulkUpdate(msg) {
     for (const styleId of Object.keys(msg.changes)) {
       try {
         var styleChanges = msg.changes[styleId];
-        var textStyle = figma.getStyleById(styleId);
+        var textStyle = await figma.getStyleByIdAsync(styleId);
         
         if (!textStyle) {
           console.error('Text style not found:', styleId);
