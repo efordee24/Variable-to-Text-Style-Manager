@@ -3,17 +3,45 @@ figma.showUI(__html__, { width: 900, height: 600, title: "Variable Binder for Te
 
 // Auto-initialize when UI loads
 setTimeout(function() {
-  handleInit();
+  handleInit().catch(function(error) {
+    console.error('Auto-init failed:', error);
+    figma.ui.postMessage({
+      type: 'TOAST',
+      message: 'Failed to load data: ' + error.message,
+      variant: 'error'
+    });
+  });
 }, 100);
 
 // Simple message handling
 figma.ui.onmessage = function(msg) {
   if (msg.type === 'INIT_REQUEST') {
-    handleInit();
+    handleInit().catch(function(error) {
+      console.error('Init failed:', error);
+      figma.ui.postMessage({
+        type: 'TOAST',
+        message: 'Failed to load data: ' + error.message,
+        variant: 'error'
+      });
+    });
   } else if (msg.type === 'REQUEST_RESCAN') {
-    handleRescan();
+    handleRescan().catch(function(error) {
+      console.error('Rescan failed:', error);
+      figma.ui.postMessage({
+        type: 'TOAST',
+        message: 'Failed to rescan data: ' + error.message,
+        variant: 'error'
+      });
+    });
   } else if (msg.type === 'REQUEST_BULK_UPDATE') {
-    handleBulkUpdate(msg);
+    handleBulkUpdate(msg).catch(function(error) {
+      console.error('Bulk update failed:', error);
+      figma.ui.postMessage({
+        type: 'TOAST',
+        message: 'Bulk update failed: ' + error.message,
+        variant: 'error'
+      });
+    });
   } else if (msg.type === 'REQUEST_EXPORT_CSV') {
     handleExportCSV();
   } else if (msg.type === 'RESIZE') {
@@ -30,99 +58,85 @@ figma.ui.onmessage = function(msg) {
   }
 };
 
-function handleInit() {
+async function handleInit() {
   try {
     // Load variable collections first, then text styles
-    figma.variables.getLocalVariableCollectionsAsync().then(function(collections) {
-      // Process variable collections
-      var variableCollections = collections.map(function(collection) {
-        return {
-          id: collection.id,
-          name: collection.name,
-          variables: collection.variableIds.map(function(variableId) {
-            var variable = figma.variables.getVariableById(variableId);
-            return {
-              id: variable.id,
-              name: variable.name,
-              collectionId: collection.id,
-              value: getVariableValue(variable),
-              valueType: variable.resolvedType
-            };
-          })
-        };
+    var collections = await figma.variables.getLocalVariableCollectionsAsync();
+    
+    // Process variable collections
+    var variableCollections = [];
+    for (const collection of collections) {
+      var variables = [];
+      for (const variableId of collection.variableIds) {
+        var variable = await figma.variables.getVariableByIdAsync(variableId);
+        variables.push({
+          id: variable.id,
+          name: variable.name,
+          collectionId: collection.id,
+          value: getVariableValue(variable),
+          valueType: variable.resolvedType
+        });
+      }
+      variableCollections.push({
+        id: collection.id,
+        name: collection.name,
+        variables: variables
       });
+    }
 
-      // Extract group paths from variables
-      var groupPaths = extractGroupPaths(variableCollections);
+    // Extract group paths from variables
+    var groupPaths = extractGroupPaths(variableCollections);
 
-      // Now load text styles
-      figma.getLocalTextStylesAsync().then(function(textStyles) {
+    // Now load text styles
+    var textStyles = await figma.getLocalTextStylesAsync();
 
-        for (const style of textStyles) {
-          if (style.boundVariables) {
-            for (const field in style.boundVariables) {
-              const alias = (style.boundVariables)[field];
-            }
+    for (const style of textStyles) {
+      if (style.boundVariables) {
+        for (const field in style.boundVariables) {
+          const alias = (style.boundVariables)[field];
+        }
+      }
+    }
+
+    // Process text styles
+    var styles = textStyles.map(function(style) {
+      return {
+        styleId: style.id,
+        styleName: style.name,
+        current: {
+          fontFamily: {
+            value: style.fontName ? style.fontName.family : undefined,
+            variableId: (style.boundVariables && style.boundVariables.fontFamily && style.boundVariables.fontFamily.id) || null
+          },
+          fontSize: {
+            value: style.fontSize !== figma.mixed ? style.fontSize : undefined,
+            variableId: (style.boundVariables && style.boundVariables.fontSize && style.boundVariables.fontSize.id) || null
+          },
+          fontWeight: {
+            value: style.fontName ? style.fontName.style : undefined,
+            variableId: (style.boundVariables && style.boundVariables.fontWeight && style.boundVariables.fontWeight.id) || null
+          },
+          lineHeight: {
+            value: style.lineHeight !== figma.mixed ? style.lineHeight : undefined,
+            variableId: (style.boundVariables && style.boundVariables.lineHeight && style.boundVariables.lineHeight.id) || null
+          },
+          letterSpacing: {
+            value: style.letterSpacing !== figma.mixed ? style.letterSpacing : undefined,
+            variableId: (style.boundVariables && style.boundVariables.letterSpacing && style.boundVariables.letterSpacing.id) || null
           }
         }
+      };
+    });
 
-
-        // Process text styles
-        var styles = textStyles.map(function(style) {
-          return {
-            styleId: style.id,
-            styleName: style.name,
-            current: {
-              fontFamily: {
-                value: style.fontName ? style.fontName.family : undefined,
-                variableId: (style.boundVariables && style.boundVariables.fontFamily && style.boundVariables.fontFamily.id) || null
-              },
-              fontSize: {
-                value: style.fontSize !== figma.mixed ? style.fontSize : undefined,
-                variableId: (style.boundVariables && style.boundVariables.fontSize && style.boundVariables.fontSize.id) || null
-              },
-              fontWeight: {
-                value: style.fontName ? style.fontName.style : undefined,
-                variableId: (style.boundVariables && style.boundVariables.fontWeight && style.boundVariables.fontWeight.id) || null
-              },
-              lineHeight: {
-                value: style.lineHeight !== figma.mixed ? style.lineHeight : undefined,
-                variableId: (style.boundVariables && style.boundVariables.lineHeight && style.boundVariables.lineHeight.id) || null
-              },
-              letterSpacing: {
-                value: style.letterSpacing !== figma.mixed ? style.letterSpacing : undefined,
-                variableId: (style.boundVariables && style.boundVariables.letterSpacing && style.boundVariables.letterSpacing.id) || null
-              }
-            }
-          };
-        });
-
-        /*current: {
-              fontFamily: style.fontName ? style.fontName.family : undefined,
-              fontSize: style.fontSize !== figma.mixed ? style.fontSize : undefined,
-              fontWeight: style.fontName ? style.fontName.style : undefined,
-              lineHeight: style.lineHeight !== figma.mixed ? style.lineHeight : undefined,
-              letterSpacing: style.letterSpacing !== figma.mixed ? style.letterSpacing : undefined
-            }
-              */
-
-        // Send data to UI
-        figma.ui.postMessage({
-          type: 'INIT_DATA',
-          data: {
-            styles: styles,
-            collections: variableCollections,
-            groupPaths: groupPaths,
-            propertyCollections: {}
-          }
-        });
-      });
-    }).catch(function(error) {
-      figma.ui.postMessage({
-        type: 'TOAST',
-        message: 'Failed to load data: ' + error.message,
-        variant: 'error'
-      });
+    // Send data to UI
+    figma.ui.postMessage({
+      type: 'INIT_DATA',
+      data: {
+        styles: styles,
+        collections: variableCollections,
+        groupPaths: groupPaths,
+        propertyCollections: {}
+      }
     });
   } catch (error) {
     figma.ui.postMessage({
@@ -133,11 +147,11 @@ function handleInit() {
   }
 }
 
-function handleRescan() {
-  handleInit();
+async function handleRescan() {
+  await handleInit();
 }
 
-function handleBulkUpdate(msg) {
+async function handleBulkUpdate(msg) {
   try {
     if (!msg.changes || Object.keys(msg.changes).length === 0) {
       figma.ui.postMessage({
@@ -152,7 +166,7 @@ function handleBulkUpdate(msg) {
     var errorCount = 0;
     
     // Process each style change
-    Object.keys(msg.changes).forEach(function(styleId) {
+    for (const styleId of Object.keys(msg.changes)) {
       try {
         var styleChanges = msg.changes[styleId];
         var textStyle = figma.getStyleById(styleId);
@@ -160,44 +174,40 @@ function handleBulkUpdate(msg) {
         if (!textStyle) {
           console.error('Text style not found:', styleId);
           errorCount++;
-          return;
+          continue;
         }
         
-        // Apply each property change
-        Object.keys(styleChanges).forEach(function(propertyType) {
+        // Process each property change
+        for (const propertyType of Object.keys(styleChanges)) {
           var variableId = styleChanges[propertyType];
-          var variable = figma.variables.getVariableById(variableId);
+          var variable = await figma.variables.getVariableByIdAsync(variableId);
+          
           if (!variable) {
             console.error('Variable not found:', variableId);
             errorCount++;
-            return;
+            continue;
           }
           
           // Apply variable to the appropriate property
           if (propertyType === 'fontFamily') {
-            // For font family, bind the string variable directly
             textStyle.setBoundVariable('fontFamily', variable);
           } else if (propertyType === 'fontSize') {
-            // For font size, bind the variable
             textStyle.setBoundVariable('fontSize', variable);
           } else if (propertyType === 'fontWeight') {
-            // For font weight, bind the variable
             textStyle.setBoundVariable('fontWeight', variable);
           } else if (propertyType === 'lineHeight') {
-            // For line height, bind the variable
             textStyle.setBoundVariable('lineHeight', variable);
           } else if (propertyType === 'letterSpacing') {
-            // For letter spacing, bind the variable
             textStyle.setBoundVariable('letterSpacing', variable);
           }
-        });
+        }
         
         updatedCount++;
       } catch (error) {
         console.error('Error updating style:', styleId, error);
         errorCount++;
       }
-    });
+    }
     
     // Send success message
     var message = 'Updated ' + updatedCount + ' text style(s)';
