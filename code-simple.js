@@ -59,14 +59,10 @@ function handleInit() {
       figma.getLocalTextStylesAsync().then(function(textStyles) {
 
         for (const style of textStyles) {
-          console.log("Style:", style.name);
           if (style.boundVariables) {
             for (const field in style.boundVariables) {
               const alias = (style.boundVariables)[field];
-              console.log(`  Field ${field} is bound to variable id ${alias.id}`);
             }
-          } else {
-            console.log("  No variable bindings on this style.");
           }
         }
 
@@ -143,30 +139,23 @@ function handleRescan() {
 
 function handleBulkUpdate(msg) {
   try {
-    console.log('Bulk update requested with changes:', msg);
-    
     if (!msg.changes || Object.keys(msg.changes).length === 0) {
       figma.ui.postMessage({
         type: 'TOAST',
         message: 'No changes to apply',
         variant: 'info'
       });
-      console.log('No changes to apply');
       return;
     }
     
     var updatedCount = 0;
     var errorCount = 0;
-
-    console.log('msg.changes length:', Object.keys(msg.changes).length);
     
     // Process each style change
     Object.keys(msg.changes).forEach(function(styleId) {
-      console.log('styleId to update:', styleId);
       try {
         var styleChanges = msg.changes[styleId];
         var textStyle = figma.getStyleById(styleId);
-        console.log('textStyle:', textStyle);
         
         if (!textStyle) {
           console.error('Text style not found:', styleId);
@@ -178,41 +167,30 @@ function handleBulkUpdate(msg) {
         Object.keys(styleChanges).forEach(function(propertyType) {
           var variableId = styleChanges[propertyType];
           var variable = figma.variables.getVariableById(variableId);
-          console.log('variable:', variable);
           if (!variable) {
             console.error('Variable not found:', variableId);
             errorCount++;
             return;
           }
-
-          console.log('styleId:', styleId, 'propertyType:', propertyType);
           
           // Apply variable to the appropriate property
           if (propertyType === 'fontFamily') {
             // For font family, bind the string variable directly
             textStyle.setBoundVariable('fontFamily', variable);
-            console.log('fontFamily variable set:', variable);
           } else if (propertyType === 'fontSize') {
             // For font size, bind the variable
             textStyle.setBoundVariable('fontSize', variable);
-            console.log('fontSize variable set:', variable);
           } else if (propertyType === 'fontWeight') {
             // For font weight, bind the variable
             textStyle.setBoundVariable('fontWeight', variable);
-            console.log('fontWeight variable set:', variable);
           } else if (propertyType === 'lineHeight') {
             // For line height, bind the variable
-            console.log('lineHeight variable set:', variable);
             textStyle.setBoundVariable('lineHeight', variable);
-            
           } else if (propertyType === 'letterSpacing') {
             // For letter spacing, bind the variable
             textStyle.setBoundVariable('letterSpacing', variable);
-            console.log('letterSpacing variable set:', variable);
           }
         });
-
-        console.log('textStyle after update:', textStyle);
         
         updatedCount++;
       } catch (error) {

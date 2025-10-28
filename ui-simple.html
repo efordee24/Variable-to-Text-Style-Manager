@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), display-capture=()">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self';">
   <title>Variable Binder for Text Styles</title>
   <style>
     * {
@@ -13,7 +13,7 @@
     }
     
     body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       font-size: 12px;
       line-height: 1.4;
       color: #333;
@@ -374,26 +374,16 @@
     let filteredStyles = null; // Store filtered styles
     let currentFilter = ''; // Store current filter value
 
-    // Load saved property collections from localStorage
+    // Load saved property collections (in-memory only due to localStorage restrictions)
     function loadPropertyCollections() {
-      try {
-        var saved = localStorage.getItem('variable-selections');
-        if (saved) {
-          propertyCollections = JSON.parse(saved);
-        }
-      } catch (error) {
-        console.error('Error loading property collections:', error);
-        propertyCollections = {};
-      }
+      // Initialize empty collections - localStorage is disabled in Figma plugins
+      propertyCollections = {};
     }
 
-    // Save property collections to localStorage
+    // Save property collections (in-memory only due to localStorage restrictions)
     function savePropertyCollections() {
-      try {
-        localStorage.setItem('figma-plugin-property-collections', JSON.stringify(propertyCollections));
-      } catch (error) {
-        console.error('Error saving property collections:', error);
-      }
+      // No-op - localStorage is disabled in Figma plugins
+      // Selections will persist during the session but not across plugin restarts
     }
 
     // Restore selected values in dropdowns after rendering
@@ -468,7 +458,6 @@
     // Initialize
     // Initialize the UI
     window.addEventListener('load', function() {
-      console.log('UI loaded, loading saved selections...');
       
       // Load saved property collections
       loadPropertyCollections();
@@ -480,7 +469,6 @@
     // Listen for messages from the plugin
     window.addEventListener('message', function(event) {
       const message = event.data.pluginMessage;
-      console.log('Received message:', message);
       
       if (message.type === 'INIT_DATA' || message.type === 'TABLE_DATA') {
         data = message.data;
@@ -495,7 +483,6 @@
         // Clear styleChanges if bulk update was successful
         if (message.variant === 'success' && message.message.includes('Updated')) {
           styleChanges = {};
-          console.log('Cleared styleChanges after successful bulk update');
         }
       } else if (message.type === 'CSV_READY') {
         downloadCSV(message.csv);
@@ -851,15 +838,12 @@
     }
 
     function handleVariableChange(styleId, propertyType, variableId) {
-      console.log('handleVariableChange called with:', styleId, propertyType, variableId);
       // Track the change
       if (!styleChanges[styleId]) {
         styleChanges[styleId] = {};
       }
       
       if (variableId) {
-        console.log('styleId:', styleId);
-        console.log('propertyType:', propertyType);
         styleChanges[styleId][propertyType] = variableId;
       } else {
         // If no variable selected, remove the change
